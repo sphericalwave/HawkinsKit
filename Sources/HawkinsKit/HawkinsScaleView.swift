@@ -61,3 +61,11 @@ public struct HawkinsScaleView: View {
         .background(isCurrent ? level.color.opacity(0.12) : Color.clear)
     }
 }
+
+#Preview("Full scale") {
+    HawkinsScaleView(currentScore: 425)
+}
+
+#Preview("No highlight") {
+    HawkinsScaleView()
+}

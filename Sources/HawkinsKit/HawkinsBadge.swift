@@ -22,3 +22,12 @@ public struct HawkinsBadge: View {
         .background(level.color.opacity(0.15), in: Capsule())
     }
 }
+
+#Preview("Badges across the scale") {
+    VStack(alignment: .leading, spacing: 10) {
+        ForEach([20, 100, 200, 350, 500, 600, 850], id: \.self) { score in
+            HawkinsBadge(score: score)
+        }
+    }
+    .padding()
+}

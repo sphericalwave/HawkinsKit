@@ -42,3 +42,19 @@ public struct HawkinsPicker: View {
         }
     }
 }
+
+private struct HawkinsPickerPreviewContainer: View {
+    @State private var score = 400
+
+    var body: some View {
+        List {
+            Section("Calibration") {
+                HawkinsPicker(score: $score)
+            }
+        }
+    }
+}
+
+#Preview("Picker") {
+    HawkinsPickerPreviewContainer()
+}
