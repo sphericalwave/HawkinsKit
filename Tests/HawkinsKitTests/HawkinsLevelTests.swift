@@ -43,4 +43,15 @@ final class HawkinsLevelTests: XCTestCase {
         XCTAssertEqual(Hawkins.color(for: -100), Hawkins.color(for: 0))
         XCTAssertEqual(Hawkins.color(for: 5000), Hawkins.color(for: 1000))
     }
+
+    func testPickerOrderAscendingIsTheScale() {
+        XCTAssertEqual(HawkinsPicker.levels(in: .ascending).map(\.id), Hawkins.scale.map(\.id))
+    }
+
+    func testPickerOrderDescendingPutsHighestFirst() {
+        let ids = HawkinsPicker.levels(in: .descending).map(\.id)
+        XCTAssertEqual(ids.first, "enlightenment")
+        XCTAssertEqual(ids.last, "shame")
+        XCTAssertEqual(ids.count, 17)
+    }
 }

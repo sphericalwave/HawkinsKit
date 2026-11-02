@@ -5,14 +5,28 @@ import SwiftUI
 /// `logScore`. Composed of plain rows (not its own `List`) so it drops
 /// straight into a `Form`/`List` `Section` alongside other rows.
 public struct HawkinsPicker: View {
-    @Binding private var score: Int
+    /// Row order. `.descending` puts the highest levels first (matching
+    /// `HawkinsScaleView`), for check-ins where the elevated states are the
+    /// common pick and shouldn't need a scroll to reach.
+    public enum Order: Sendable {
+        case ascending, descending
+    }
 
-    public init(score: Binding<Int>) {
+    @Binding private var score: Int
+    private let order: Order
+
+    public init(score: Binding<Int>, order: Order = .ascending) {
         self._score = score
+        self.order = order
+    }
+
+    /// The levels in display order.
+    static func levels(in order: Order) -> [HawkinsLevel] {
+        order == .ascending ? Hawkins.scale : Hawkins.scale.reversed()
     }
 
     public var body: some View {
-        ForEach(Hawkins.scale) { level in
+        ForEach(Self.levels(in: order)) { level in
             Button {
                 score = level.logScore
             } label: {
@@ -57,4 +71,13 @@ private struct HawkinsPickerPreviewContainer: View {
 
 #Preview("Picker") {
     HawkinsPickerPreviewContainer()
+}
+
+#Preview("Picker, highest first") {
+    @Previewable @State var score = 540
+    List {
+        Section("How did you feel?") {
+            HawkinsPicker(score: $score, order: .descending)
+        }
+    }
 }
