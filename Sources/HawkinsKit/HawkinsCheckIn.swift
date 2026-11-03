@@ -1,4 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// A quick after-the-fact check-in: "What did you feel?" on the Hawkins
 /// scale (highest first), plus an optional 0–10 intensity/vividness rating.
@@ -63,11 +68,20 @@ public struct HawkinsCheckInMemory: Sendable {
     }
 }
 
-/// One-screen check-in sheet: the Hawkins picker (highest first, `initial`
-/// preselected), an optional 0–10 slider, then any `extra` sections the app
-/// adds (a note, a rating). Skip and Save in the toolbar; it dismisses
-/// itself. Swiping it away saves only if an answer was changed — an
-/// untouched preselection isn't recorded as if it were given.
+/// Check-in sheet, compact by default: the preselected answer (`initial`,
+/// usually the remembered last one) is a single row — "Feeling ● Peace · 600 ›"
+/// — so accepting it is one tap on Save. Tapping the row pushes the full
+/// Hawkins list (highest first); picking a level pops straight back. An
+/// optional 0–10 slider and any `extra` sections the app adds (a note, a
+/// rating) follow. Skip and Save in the toolbar; it dismisses itself.
+/// Swiping it away saves only if an answer was changed — an untouched
+/// preselection isn't recorded as if it were given.
+///
+/// Save always commits: it ends text editing first, so a focused note's
+/// last word reaches the app's draft before `onSave` reads it; calls
+/// `onSave` exactly once; shows a checkmark (with a success haptic); then
+/// dismisses. It never goes dead — if a dismissal is dropped, tapping Save
+/// again retries the dismiss instead of being ignored.
 public struct HawkinsCheckInSheet<Extra: View>: View {
     private let title: String
     private let question: String
@@ -82,7 +96,10 @@ public struct HawkinsCheckInSheet<Extra: View>: View {
     @State private var score: Int
     @State private var intensity: Double
     @State private var touched = false
+    /// `onSave` or `onSkip` has run (or is about to); neither runs twice.
     @State private var resolved = false
+    /// Save went through — drives the checkmark and the haptic.
+    @State private var saved = false
 
     public init(title: String = "Check-in",
                 question: String = "What did you feel?",
@@ -112,8 +129,12 @@ public struct HawkinsCheckInSheet<Extra: View>: View {
         NavigationStack {
             Form {
                 Section {
-                    HawkinsPicker(score: Binding(get: { score }, set: { score = $0; touched = true }),
-                                  order: .descending)
+                    NavigationLink {
+                        HawkinsLevelChoice(question: question,
+                                           score: Binding(get: { score }, set: { score = $0; touched = true }))
+                    } label: {
+                        feelingRow
+                    }
                 } header: {
                     Text(question)
                 } footer: {
@@ -143,16 +164,24 @@ public struct HawkinsCheckInSheet<Extra: View>: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Skip") { resolve(save: false) }
+                    Button("Skip") { finish(save: false) }
+                        .disabled(saved)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { resolve(save: true) }
-                        .fontWeight(.semibold)
+                    Button { finish(save: true) } label: {
+                        if saved {
+                            Label("Saved", systemImage: "checkmark")
+                        } else {
+                            Text("Save")
+                        }
+                    }
+                    .fontWeight(.semibold)
                 }
             }
         }
+        .sensoryFeedback(.success, trigger: saved)
         #if os(macOS)
-        .frame(minWidth: 420, minHeight: 520)
+        .frame(minWidth: 420, minHeight: 360)
         #endif
         .onDisappear {
             // Swipe-away: keep a changed answer, skip an untouched one.
@@ -162,17 +191,91 @@ public struct HawkinsCheckInSheet<Extra: View>: View {
         }
     }
 
-    private func resolve(save: Bool) {
-        guard !resolved else { return }
-        resolved = true
-        save ? onSave(answer) : onSkip()
-        dismiss()
+    /// "Feeling  ● Peace · 600" — the current answer, one tap from changing.
+    private var feelingRow: some View {
+        let level = Hawkins.level(for: score)
+        return HStack {
+            Text("Feeling")
+            Spacer()
+            Circle()
+                .fill(level.color)
+                .frame(width: 10, height: 10)
+            Text("\(level.name) · \(score)")
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Choose a different feeling")
     }
+
+    /// Ends editing, then runs `onSave`/`onSkip` once and dismisses. A repeat
+    /// tap after that only retries the dismiss, so the button never goes dead.
+    private func finish(save: Bool) {
+        guard !resolved else {
+            dismiss()
+            return
+        }
+        resolved = true
+        endTextEditing()
+        Task { @MainActor in
+            // Let the field resign and hand over its final text (autocorrect,
+            // marked text) before the app's callback reads its draft.
+            try? await Task.sleep(for: .milliseconds(50))
+            if save {
+                onSave(answer)
+                saved = true
+                // Long enough to see the checkmark, well under 400 ms total.
+                try? await Task.sleep(for: .milliseconds(250))
+            } else {
+                onSkip()
+            }
+            dismiss()
+        }
+    }
+}
+
+/// The full Hawkins list behind the compact row. Picking a level pops back
+/// to the check-in, so changing the answer is two taps.
+private struct HawkinsLevelChoice: View {
+    let question: String
+    @Binding var score: Int
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Form {
+            Section(question) {
+                HawkinsPicker(score: Binding(get: { score }, set: { score = $0; dismiss() }),
+                              order: .descending)
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Feeling")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+    }
+}
+
+/// Resigns whatever text field is first responder, so its pending text is
+/// committed and the keyboard is going away before the sheet dismisses.
+@MainActor
+private func endTextEditing() {
+    #if canImport(UIKit)
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    #elseif canImport(AppKit)
+    NSApp.keyWindow?.makeFirstResponder(nil)
+    #endif
 }
 
 #Preview("Check-in") {
     HawkinsCheckInSheet(question: "What did you feel while visualizing?",
                         intensityTitle: "How vivid was it?",
-                        initial: .init(score: 540, intensity: 6),
-                        onSave: { print($0) })
+                        initial: .init(score: 600, intensity: 6),
+                        onSave: { print($0) },
+                        extra: {
+                            Section("Note") {
+                                TextField("How did it go?", text: .constant(""), axis: .vertical)
+                            }
+                        })
 }
