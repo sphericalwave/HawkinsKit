@@ -23,6 +23,11 @@ Hawkins.color(for: 425)          // gradient Color for that score
 - `HawkinsScaleView(currentScore: Int? = nil)` — full reference table
   (Level, Log score, Emotion, View of God, View of Life, Process), highest
   level first, optionally highlighting the row containing `currentScore`.
+- `HawkinsCheckInSheet` — after-the-fact "What did you feel?" sheet. Compact:
+  the preselected answer (`HawkinsCheckInMemory`'s last one) is a single
+  "Feeling ● Peace · 600 ›" row, so accepting it is one tap on Save; tap the
+  row to pick from the full list. Save ends text editing first, calls
+  `onSave` once, shows a checkmark, then dismisses.
 
 ## Platforms
 
