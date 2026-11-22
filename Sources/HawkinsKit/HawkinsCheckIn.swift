@@ -261,7 +261,7 @@ private struct HawkinsLevelChoice: View {
 /// committed and the keyboard is going away before the sheet dismisses.
 @MainActor
 private func endTextEditing() {
-    #if canImport(UIKit)
+    #if canImport(UIKit) && !os(watchOS)
     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     #elseif canImport(AppKit)
     NSApp.keyWindow?.makeFirstResponder(nil)
